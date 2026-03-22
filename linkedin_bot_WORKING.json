@@ -1,0 +1,303 @@
+{
+  "name": "AI LinkedIn Bot [WORKING FINAL]",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": { "interval": [{ "field": "cronExpression", "expression": "30 4 * * *" }] }
+      },
+      "id": "6219eb28-1864-4e22-9fdc-c428d7e34a7c",
+      "name": "Daily 10AM IST",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [-176, -96]
+    },
+    {
+      "parameters": {},
+      "id": "manual-trigger-001",
+      "name": "Test Manually",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-176, 64]
+    },
+    {
+      "parameters": {
+        "url": "https://hn.algolia.com/api/v1/search?query=AI+automation+machine+learning&tags=story&hitsPerPage=15&numericFilters=points%3E30",
+        "options": { "timeout": 15000 }
+      },
+      "id": "6255d833-3e0c-4ed3-9c88-313c01fffbc8",
+      "name": "Fetch Trending HN Topics",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [64, -16],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst hits = (data.hits || []).filter(h => h.title && h.points > 20);\nhits.sort((a, b) => b.points - a.points);\nconst keywords = ['ai','gpt','llm','machine learning','automation','agent','cybersecurity','openai','python','ml','deep learning','model','neural','robot','data'];\nconst relevant = hits.filter(h => keywords.some(k => h.title.toLowerCase().includes(k))).slice(0, 5);\nconst pick = relevant[0] || hits[0] || { title: 'AI agents are replacing SaaS workflows in 2026', url: '', points: 100 };\n\nconst profileCtx = 'Aditya Sahani: AI Student (IBCP), 16, Python Developer, IIT Bombay Eureka Junior Top 100, built anomaly detection, AI scrapers, 14k leads/day automation pipeline, interested in AI, ML, Automation, Cybersecurity.';\n\nconst prompt = 'You are a top 1% LinkedIn strategist. Write a viral post for this student developer.\\n\\nAbout: ' + profileCtx + '\\n\\nTrending topic: \"' + pick.title + '\"\\n\\nRules:\\n- 1-line scroll-stopping hook\\n- Short sentences, mobile-friendly\\n- Personal angle from his real projects\\n- 1 key insight, 1 takeaway\\n- End with question\\n- Max 3 emojis\\n\\nReturn ONLY this JSON, no markdown:\\n{\"post\":\"full post here\",\"hashtags\":\"#AI #tag2 #tag3 #tag4\",\"best_time\":\"HH:MM IST\",\"hook_preview\":\"first line only\"}';\n\nconst openai_body = JSON.stringify({\n  model: 'gpt-4.1-nano',\n  max_tokens: 800,\n  temperature: 0.85,\n  messages: [\n    { role: 'system', content: 'You are a top LinkedIn content strategist. Return ONLY valid JSON. No markdown. No explanation.' },\n    { role: 'user',   content: prompt }\n  ]\n});\n\nreturn [{ json: {\n  trending_topic: pick.title,\n  topic_url: pick.url || '',\n  topic_points: pick.points || 0,\n  openai_prompt: prompt,\n  openai_body: openai_body,\n  run_date: new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' }),\n  run_timestamp: new Date().toISOString()\n} }];"
+      },
+      "id": "3d479381-bc9d-46d8-ad8f-b1eb1bc7f281",
+      "name": "Pick Topic and Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [304, -16]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "seconds"
+      },
+      "id": "bda36bab-d583-4e02-94f4-f9442601dbfa",
+      "name": "Wait 3s Before OpenAI",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [544, -16],
+      "webhookId": "wait-openai-rate-limit-001"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer YOUR_OPENAI_API_KEY_HERE" },
+            { "name": "Content-Type",  "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Pick Topic and Build Prompt').first().json.openai_body }}",
+        "options": { "timeout": 60000 }
+      },
+      "id": "e7f00dff-6cd2-466a-a018-35f35f63656b",
+      "name": "OpenAI Generate Post",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [784, -16],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResp = $input.first().json;\nconst prev = $('Pick Topic and Build Prompt').first().json;\n\nconst isRateLimit = aiResp.error?.status === 429 || aiResp.status === 429 || JSON.stringify(aiResp).includes('429');\n\nlet p = {};\nif (isRateLimit) {\n  p = {\n    post: 'Deep learning just got ears.\\n\\nResearchers built an AI that listens to machines — motors, pumps, turbines — and detects problems before they break.\\n\\nNo sensors. No manual checks. Just sound + AI.\\n\\nI built something similar at 16. My anomaly detection project flags unusual patterns in data streams automatically.\\n\\nThe principle is the same:\\nTeach the model what normal sounds like.\\nAnything else = alert.\\n\\nThis is not the future. This is running in factories right now.\\n\\nIf AI can hear a failing motor, what else can it sense before humans notice?',\n    hashtags: '#AI #MachineLearning #AnomalyDetection #BuildInPublic',\n    best_time: '11:00 IST',\n    hook_preview: 'Deep learning just got ears.',\n    used_fallback: true\n  };\n} else {\n  try {\n    const raw = aiResp.choices?.[0]?.message?.content || '{}';\n    p = JSON.parse(raw.replace(/```json|```/gi,'').trim());\n  } catch(e) {\n    p = {\n      post: 'I built an anomaly detection system at 16.\\n\\nNot for a grade. For real.\\n\\nThe gap between student project and real system is smaller than you think.\\n\\nYou just have to build like it matters.\\n\\nWhat is the most real thing you have built?',\n      hashtags: '#AI #BuildInPublic #Automation #StudentDeveloper',\n      best_time: '11:00 IST',\n      hook_preview: 'I built an anomaly detection system at 16.'\n    };\n  }\n}\n\nconst timeStr = (p.best_time || '11:00 IST').replace(' IST','');\nconst tp = timeStr.split(':');\nlet uh = (parseInt(tp[0])||11) - 5;\nlet um = (parseInt(tp[1])||0) - 30;\nif (um < 0) { um += 60; uh -= 1; }\nif (uh < 0) uh += 24;\nconst tom = new Date();\ntom.setDate(tom.getDate()+1);\ntom.setUTCHours(uh, um, 0, 0);\n\nconst fullPost = (p.post||'') + '\\n\\n' + (p.hashtags||'');\nconst fallbackNote = p.used_fallback ? '\\n\\n⚠️ _Rate limit hit — fallback post used_' : '';\nconst tgMsg = '\\u{1F4DD} *LinkedIn Post Ready*' + (p.used_fallback ? ' _(fallback)_' : '') + '\\n\\n\\u{1F4CC} *Topic:* ' + prev.trending_topic + '\\n\\u{23F0} *Post at:* ' + (p.best_time||'11:00 IST') + ' tomorrow' + fallbackNote + '\\n\\n' + '\\u2500'.repeat(22) + '\\n\\n' + (p.post||'') + '\\n\\n' + (p.hashtags||'') + '\\n\\n' + '\\u2500'.repeat(22) + '\\n\\n\\u{1F447} Tap a button below';\n\nconst linkedin_body = JSON.stringify({\n  author: 'urn:li:person:LINKEDIN_PERSON_URN_HERE',\n  lifecycleState: 'PUBLISHED',\n  specificContent: {\n    'com.linkedin.ugc.ShareContent': {\n      shareCommentary: { text: fullPost },\n      shareMediaCategory: 'NONE'\n    }\n  },\n  visibility: { 'com.linkedin.ugc.MemberNetworkVisibility': 'PUBLIC' }\n});\n\nreturn [{ json: {\n  post_text:     p.post||'',\n  full_post:     fullPost,\n  hashtags:      p.hashtags||'#AI',\n  best_time_ist: p.best_time||'11:00 IST',\n  post_utc_iso:  tom.toISOString(),\n  hook_preview:  p.hook_preview||'',\n  telegram_msg:  tgMsg,\n  topic_title:   prev.trending_topic,\n  run_date:      prev.run_date,\n  used_fallback: p.used_fallback || false,\n  linkedin_body: linkedin_body\n} }];"
+      },
+      "id": "42319a7f-5eb7-4b60-97c9-d37807ce5f9a",
+      "name": "Parse and Format Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1024, -16]
+    },
+    {
+      "parameters": {
+        "chatId": "5969392268",
+        "text": "={{ $json.telegram_msg }}",
+        "additionalFields": {
+          "parse_mode": "Markdown",
+          "reply_markup": "={{ JSON.stringify({ inline_keyboard: [[{ text: '✅ Approve — Post Tomorrow', url: $execution.resumeUrl + '?action=approve' }, { text: '⏸ Hold — Skip Today', url: $execution.resumeUrl + '?action=hold' }]] }) }}"
+        }
+      },
+      "id": "da2005b6-f46d-4904-ad74-8aec1131ddf8",
+      "name": "Telegram Send Preview",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1264, -16],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": { "resume": "webhook", "options": {} },
+      "id": "e694aca7-9e11-4fd2-b8ff-ebd6e8baf716",
+      "name": "Wait for Your Decision",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [1504, -16],
+      "webhookId": "linkedin-approval-aditya-2026"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [{
+            "id": "chk-approve",
+            "leftValue": "={{ ($json.query && $json.query.action) ? $json.query.action : 'hold' }}",
+            "rightValue": "approve",
+            "operator": { "type": "string", "operation": "equals" }
+          }],
+          "options": {}
+        },
+        "options": {}
+      },
+      "id": "eddc7857-3a73-4d00-b423-ce75c9216d8b",
+      "name": "Approved or Held",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1744, -16]
+    },
+    {
+      "parameters": {
+        "chatId": "5969392268",
+        "text": "={{ '✅ *Approved!*\\n\\nScheduled for *' + $(\\'Parse and Format Output\\').first().json.best_time_ist + '* tomorrow.\\nWill notify when live.' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "3288b36a-5384-40ea-9e0a-b691c8370ce6",
+      "name": "Telegram Approved ACK",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1984, -160],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "specificTime",
+        "dateTime": "={{ $('Parse and Format Output').first().json.post_utc_iso }}"
+      },
+      "id": "97068f37-7372-4368-ab61-6cdb4719cd95",
+      "name": "Wait Until Peak Post Time",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [2224, -160],
+      "webhookId": "linkedin-peak-aditya-2026"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/v2/ugcPosts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization",             "value": "Bearer YOUR_LINKEDIN_ACCESS_TOKEN_HERE" },
+            { "name": "Content-Type",              "value": "application/json" },
+            { "name": "X-Restli-Protocol-Version", "value": "2.0.0" }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $('Parse and Format Output').first().json.linkedin_body }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "8a1e5b30-9873-4110-9f54-71be552d85d7",
+      "name": "Post to LinkedIn API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [2464, -160],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const resp = $input.first().json;\nconst id = resp.id || resp.value?.id || '';\nconst url = id ? 'https://www.linkedin.com/feed/update/' + id + '/' : 'https://www.linkedin.com/feed/';\nreturn [{ json: { post_id: id, post_url: url, posted_at: new Date().toISOString() } }];"
+      },
+      "id": "d24492f7-fbf8-44fb-bc86-fe32132e21f5",
+      "name": "Extract Post URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2704, -160]
+    },
+    {
+      "parameters": {
+        "chatId": "5969392268",
+        "text": "={{ '\\u{1F680} *LIVE on LinkedIn!*\\n\\n' + $json.post_url + '\\n\\nCheck engagement in 2 hours.' }}",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "272fa35e-a97a-45d4-bc35-4d4b078841a1",
+      "name": "Telegram Posted Live",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2944, -240],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": { "__rl": true, "value": "PASTE_YOUR_GOOGLE_SHEET_ID_HERE", "mode": "id" },
+        "sheetName":  { "__rl": true, "value": "Posts Log", "mode": "name" },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Date":          "={{ $('Parse and Format Output').first().json.run_date }}",
+            "Topic":         "={{ $('Parse and Format Output').first().json.topic_title }}",
+            "Post":          "={{ $('Parse and Format Output').first().json.post_text }}",
+            "Hashtags":      "={{ $('Parse and Format Output').first().json.hashtags }}",
+            "Used Fallback": "={{ $('Parse and Format Output').first().json.used_fallback }}",
+            "Posted At":     "={{ $('Extract Post URL').first().json.posted_at }}",
+            "Post URL":      "={{ $('Extract Post URL').first().json.post_url }}",
+            "Status":        "Published"
+          }
+        },
+        "options": {}
+      },
+      "id": "2c80e710-7894-4f62-8863-b771695c4aff",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [2944, -80],
+      "credentials": {
+        "googleSheetsOAuth2Api": { "id": "fPxWv5CdoYfX9Z3Z", "name": "Google Sheets account" }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "chatId": "5969392268",
+        "text": "⏸ *Held.* No post today.\n\nFresh content tomorrow at 10:00 AM IST. 👍",
+        "additionalFields": { "parse_mode": "Markdown" }
+      },
+      "id": "4260b46e-912c-4241-9236-f0f364e9f6cc",
+      "name": "Telegram Held",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1984, 128],
+      "credentials": {
+        "telegramApi": {
+          "id": "YOUR_TELEGRAM_CREDENTIAL_ID",
+          "name": "Telegram Bot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Daily 10AM IST":              { "main": [[{ "node": "Fetch Trending HN Topics",     "type": "main", "index": 0 }]] },
+    "Test Manually":               { "main": [[{ "node": "Fetch Trending HN Topics",     "type": "main", "index": 0 }]] },
+    "Fetch Trending HN Topics":    { "main": [[{ "node": "Pick Topic and Build Prompt",  "type": "main", "index": 0 }]] },
+    "Pick Topic and Build Prompt": { "main": [[{ "node": "Wait 3s Before OpenAI",        "type": "main", "index": 0 }]] },
+    "Wait 3s Before OpenAI":       { "main": [[{ "node": "OpenAI Generate Post",         "type": "main", "index": 0 }]] },
+    "OpenAI Generate Post":        { "main": [[{ "node": "Parse and Format Output",      "type": "main", "index": 0 }]] },
+    "Parse and Format Output":     { "main": [[{ "node": "Telegram Send Preview",        "type": "main", "index": 0 }]] },
+    "Telegram Send Preview":       { "main": [[{ "node": "Wait for Your Decision",       "type": "main", "index": 0 }]] },
+    "Wait for Your Decision":      { "main": [[{ "node": "Approved or Held",             "type": "main", "index": 0 }]] },
+    "Approved or Held": {
+      "main": [
+        [{ "node": "Telegram Approved ACK", "type": "main", "index": 0 }],
+        [{ "node": "Telegram Held",         "type": "main", "index": 0 }]
+      ]
+    },
+    "Telegram Approved ACK":     { "main": [[{ "node": "Wait Until Peak Post Time", "type": "main", "index": 0 }]] },
+    "Wait Until Peak Post Time": { "main": [[{ "node": "Post to LinkedIn API",      "type": "main", "index": 0 }]] },
+    "Post to LinkedIn API":      { "main": [[{ "node": "Extract Post URL",          "type": "main", "index": 0 }]] },
+    "Extract Post URL": {
+      "main": [
+        [{ "node": "Telegram Posted Live", "type": "main", "index": 0 }],
+        [{ "node": "Log to Google Sheets", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true },
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "f9457ca94cb4a796d40b17d173d80d35979f6fb59e00e286adbc7ad7bccb1aa8"
+  }
+}
